@@ -1,0 +1,3 @@
+from dynamax.deep_hidden_markov_model.models.gaussian_deephmm import SphericalGaussianDeepHMM
+
+from dynamax.deep_hidden_markov_model.inference import hmm_filter
