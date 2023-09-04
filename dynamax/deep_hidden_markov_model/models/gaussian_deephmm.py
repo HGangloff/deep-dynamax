@@ -166,7 +166,7 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         #jax.debug.print("{x}, {y}", x=jnp.amax(means), y=jnp.amin(means))
         #jax.debug.print("{x}, {y}", x=jnp.amax(scales), y=jnp.amin(scales))
         return (ParamsSphericalGaussianDeepHMMEmissions(
-            nn_params=self.init_nn_params_fn(),
+            nn_params=params.nn_params,
             means=means,
             scales=scales,
         ), ParamsSphericalGaussianHMMEmissions(
