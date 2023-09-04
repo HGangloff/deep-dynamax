@@ -7,12 +7,14 @@ from jax import vmap
 import jax.tree_util as jtu
 from jaxtyping import Float, Array
 import optax
-from dynamax.parameters import ParameterProperties
+from dynamax.parameters import ParameterProperties, from_unconstrained
 from dynamax.hidden_markov_model.models.gaussian_hmm import ParamsSphericalGaussianHMMEmissions
 from dynamax.deep_hidden_markov_model.models.abstractions import DeepHMM, DeepHMMEmissions
 from dynamax.deep_hidden_markov_model.models.abstractions import DeepHMMParameterSet, DeepHMMPropertySet
-from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
 from dynamax.hidden_markov_model.models.transitions import StandardHMMTransitions, ParamsStandardHMMTransitions
+from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
+from dynamax.deep_hidden_markov_model.models.transitions import DeepHMMTransitions, ParamsDeepHMMTransitions
+from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
 from dynamax.types import Scalar
 from dynamax.utils.distributions import InverseWishart
 from dynamax.utils.distributions import NormalInverseGamma
@@ -85,12 +87,12 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         )
         return params, props
 
-    def compute_means_and_covar(self, params, emissions, inputs=None):
-        # Here, the function should be called compute_means_and_scales
+    def compute_means_and_covar_nn(self, params, props, emissions, inputs=None):
+        # Here, the function should be called compute_means_and_scales_nn
         # Evaluate the NN on all the time steps with vmap
         f = lambda emission: \
             vmap(lambda state: self.nn(emission, state, params.nn_params))(
-                    jnp.arange(self.num_states)[:, None]
+                jnp.arange(self.num_states)[:, None]
             )
         if self.num_lags > 0:
             _emissions = jnp.stack([jnp.roll(emissions, shift=i, axis=0)
@@ -99,8 +101,14 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         else:
             means_and_scales = vmap(f)(emissions)
         # means_and_scales is shape (num_timesteps X num_states X 2 * emission_dim) (interlaced))        
-        means = means_and_scales[..., ::self.num_states]
-        scales = means_and_scales[..., 1::self.num_states]
+        means = from_unconstrained(
+            means_and_scales[..., ::self.num_states],
+            props.means
+        )
+        scales = from_unconstrained(
+            means_and_scales[..., 1::self.num_states],
+            props.scales
+        )
         #jax.debug.print("{x}, {y}", x=jnp.amax(means), y=jnp.amin(means))
         #jax.debug.print("{x}, {y}", x=jnp.amax(scales), y=jnp.amin(scales))
         return (ParamsSphericalGaussianDeepHMMEmissions(
@@ -123,7 +131,7 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
 
 class ParamsSphericalGaussianDeepHMM(NamedTuple):
     initial: ParamsStandardHMMInitialState
-    transitions: ParamsStandardHMMTransitions
+    transitions: Union[ParamsStandardHMMTransitions, ParamsDeepHMMTransitions]
     emissions: ParamsSphericalGaussianDeepHMMEmissions
 
 
@@ -159,7 +167,8 @@ class SphericalGaussianDeepHMM(DeepHMM):
     """
     def __init__(self, num_states: int,
                  emission_dim: int,
-                 nn_architecture: List,
+                 nn_architecture_emissions: List,
+                 nn_architecture_transitions: Union[List, None]=None,
                  num_lags: int=0,
                  initial_probs_concentration: Union[Scalar, Float[Array, "num_states"]]=1.1,
                  transition_matrix_concentration: Union[Scalar, Float[Array, "num_states"]]=1.1,
@@ -168,13 +177,26 @@ class SphericalGaussianDeepHMM(DeepHMM):
                  m_step_num_iters: int=50):
         self.emission_dim = emission_dim
         initial_component = StandardHMMInitialState(num_states, initial_probs_concentration=initial_probs_concentration)
-        transition_component = StandardHMMTransitions(num_states, concentration=transition_matrix_concentration, stickiness=transition_matrix_stickiness)
+        if nn_architecture_transitions is not None:
+            transition_component = DeepHMMTransitions(
+                num_states,
+                nn_architecture_transitions,
+                concentration=transition_matrix_concentration,
+                stickiness=transition_matrix_stickiness
+            )
+        else:
+            transition_component = StandardHMMTransitions(
+                num_states,
+                concentration=transition_matrix_concentration,
+                stickiness=transition_matrix_stickiness
+            )
         emission_component = SphericalGaussianDeepHMMEmissions(
             num_states, emission_dim,
-            nn_architecture,
+            nn_architecture_emissions,
             num_lags,
             m_step_optimizer=m_step_optimizer,
-            m_step_num_iters=m_step_num_iters)
+            m_step_num_iters=m_step_num_iters
+        )
 
         super().__init__(num_states, initial_component, transition_component, emission_component)
 

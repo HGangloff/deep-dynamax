@@ -451,7 +451,7 @@ class SSM(ABC):
             params = from_unconstrained(unc_params, props)
             minibatch_emissions, minibatch_inputs = minibatch
             scale = len(batch_emissions) / len(minibatch_emissions)
-            minibatch_lls = vmap(partial(self.marginal_log_prob, params))(minibatch_emissions, minibatch_inputs)
+            minibatch_lls = vmap(partial(self.marginal_log_prob, params, props))(minibatch_emissions, minibatch_inputs)
             lp = self.log_prior(params) + minibatch_lls.sum() * scale
             return -lp / batch_emissions.size
 
