@@ -94,12 +94,9 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
             vmap(lambda state: self.nn(emission, state, params.nn_params))(
                 jnp.arange(self.num_states)[:, None]
             )
-        if self.num_lags > 0:
-            _emissions = jnp.stack([jnp.roll(emissions, shift=i, axis=0)
-                for i in range(self.num_lags + 1)], axis=1)
-            means_and_scales = vmap(f)(_emissions)
-        else:
-            means_and_scales = vmap(f)(emissions)
+        _emissions = jnp.stack([jnp.roll(emissions, shift=self.num_lags, axis=0)
+            for i in range(self.num_lags)], axis=1)
+        means_and_scales = vmap(f)(_emissions)
         # means_and_scales is shape (num_timesteps X num_states X 2 * emission_dim) (interlaced))        
         means = from_unconstrained(
             means_and_scales[..., ::self.num_states],
@@ -169,7 +166,7 @@ class SphericalGaussianDeepHMM(DeepHMM):
                  emission_dim: int,
                  nn_architecture_emissions: List,
                  nn_architecture_transitions: Union[List, None]=None,
-                 num_lags: int=0,
+                 num_lags: int=1,
                  initial_probs_concentration: Union[Scalar, Float[Array, "num_states"]]=1.1,
                  transition_matrix_concentration: Union[Scalar, Float[Array, "num_states"]]=1.1,
                  transition_matrix_stickiness: Scalar=0.0,
