@@ -1,6 +1,11 @@
+import jax
 import jax.random as jr
 import jax.numpy as jnp
+from jax import vmap
 import equinox as eqx
+
+from dynamax.utils.utils import ensure_array_has_batch_dim
+from dynamax.utils.optimize import run_gradient_descent
 
 class _MLP(eqx.Module):
     """
@@ -62,3 +67,40 @@ def make_mlp(key, nn_architecture):
         return model(ei)
 
     return init_fn, apply_fn
+
+def pretrain_nn(nn, nn_params, props, pretrain_params):
+    """
+    pretrain_params (dict) with keys inputs, outputs, optimizer,
+    optimizer_state, num_mstep_iters
+    """
+    # the output (ie params) should be given in their unconstrained form!!!
+    # unc_params = to_unconstrained(params, props)
+
+    #batch_outputs = ensure_array_has_batch_dim(
+    #    pretrain_params["outputs"],
+    #    pretrain_params["outputs"]
+    #)
+    #batch_inputs = ensure_array_has_batch_dim(
+    #    pretrain_params["inputs"],
+    #    pretrain_params["inputs"]
+    #)
+    def mse(nn_params):
+        vloss = vmap(lambda inpt, output: nn(inpt[0], inpt[1], nn_params) -
+                output[inpt[1].astype(int)])
+            pretrain_params["inputs"][0, 1], nn_params))
+        return jnp.mean(
+            vloss(
+                pretrain_params["inputs"],
+                pretrain_params["outputs"]
+            ) ** 2
+        )
+
+    # Run gradient descent
+    nn_params, m_step_state, losses = run_gradient_descent(
+        mse,
+        nn_params,
+        optimizer=pretrain_params["optimizer"],
+        optimizer_state=pretrain_params["optimizer_state"],
+        num_mstep_iters=pretrain_params["num_mstep_iters"]
+    )
+    return nn_params
