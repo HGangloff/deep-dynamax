@@ -23,8 +23,8 @@ from dynamax.utils.distributions import nig_posterior_update
 from dynamax.utils.distributions import niw_posterior_update
 from dynamax.utils.bijectors import RealToPSDBijector
 from dynamax.utils.utils import pytree_sum
-from dynamax.utils.nn import _MLP, make_mlp
-from typing import NamedTuple, Optional, Tuple, Union, List
+from dynamax.utils.nn import _MLP, make_mlp, pretrain_nn
+from typing import NamedTuple, Optional, Tuple, Union, List, Dict
 
 
 class ParamsSphericalGaussianDeepHMMEmissions(NamedTuple):
@@ -54,7 +54,8 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         return (self.emission_dim,)
 
     def initialize(self,
-            key=jr.PRNGKey(0)):
+            key=jr.PRNGKey(0),
+            pretrain_emissions=None):
         """Initialize the model parameters and their corresponding properties.
 
         You can either specify parameters manually via the keyword arguments, or you can have
@@ -72,7 +73,6 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         """
 
         self.init_nn_params_fn, self.nn = make_mlp(key, self.nn_architecture)
-
         params = ParamsSphericalGaussianDeepHMMEmissions(
             nn_params=self.init_nn_params_fn(),
         )
@@ -85,6 +85,16 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
             means=ParameterProperties(),
             scales=ParameterProperties(constrainer=tfb.Softplus())
         )
+        if pretrain_emissions is not None:
+            params = params._replace(
+                nn_params=pretrain_nn(
+                    self.nn,
+                    params.nn_params,
+                    props,
+                    pretrain_emissions
+                )
+            )
+
         return params, props
 
     def compute_means_and_covar_nn(self, params, props, emissions, inputs=None):
@@ -97,13 +107,13 @@ class SphericalGaussianDeepHMMEmissions(DeepHMMEmissions):
         _emissions = jnp.stack([jnp.roll(emissions, shift=self.num_lags, axis=0)
             for i in range(self.num_lags)], axis=1)
         means_and_scales = vmap(f)(_emissions)
-        # means_and_scales is shape (num_timesteps X num_states X 2 * emission_dim) (interlaced))        
+        # means_and_scales is shape (num_timesteps X num_states X 2 * emission_dim)        
         means = from_unconstrained(
-            means_and_scales[..., ::self.num_states],
+            means_and_scales[..., :self.emission_dim],
             props.means
-        )
+        ) # all the mean stacked first on last dims
         scales = from_unconstrained(
-            means_and_scales[..., 1::self.num_states],
+                means_and_scales[..., self.emission_dim:],
             props.scales
         )
         #jax.debug.print("{x}, {y}", x=jnp.amax(means), y=jnp.amin(means))
@@ -210,7 +220,8 @@ class SphericalGaussianDeepHMM(DeepHMM):
     def initialize(self, key: jr.PRNGKey=jr.PRNGKey(0),
                    method: str="prior",
                    initial_probs: Optional[Float[Array, "num_states"]]=None,
-                  transition_matrix: Optional[Float[Array, "num_states num_states"]]=None,
+                   transition_matrix: Optional[Float[Array, "num_states num_states"]]=None,
+                   pretrain_emissions: Optional[Dict]=None
         ) -> Tuple[DeepHMMParameterSet, DeepHMMPropertySet]:
         """Initialize the model parameters and their corresponding properties.
 
@@ -223,6 +234,7 @@ class SphericalGaussianDeepHMM(DeepHMM):
             method: method for initializing unspecified parameters. Both "prior" and "kmeans" are supported.
             initial_probs: manually specified initial state probabilities.
             transition_matrix: manually specified transition matrix.
+            pretrain_emissions: a dictionary containing ...
         Returns:
             Model parameters and their properties.
 
@@ -231,5 +243,5 @@ class SphericalGaussianDeepHMM(DeepHMM):
         params, props = dict(), dict()
         params["initial"], props["initial"] = self.initial_component.initialize(key1, method=method, initial_probs=initial_probs)
         params["transitions"], props["transitions"] = self.transition_component.initialize(key2, method=method, transition_matrix=transition_matrix)
-        params["emissions"], props["emissions"] = self.emission_component.initialize(key3)
+        params["emissions"], props["emissions"] = self.emission_component.initialize(key3, pretrain_emissions)
         return ParamsSphericalGaussianDeepHMM(**params), ParamsSphericalGaussianDeepHMM(**props)

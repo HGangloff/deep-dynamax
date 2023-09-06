@@ -255,7 +255,7 @@ class DeepHMMTransitions(ABC):
             emissions, inputs)
         g = lambda param: \
             vmap(lambda state: self.distribution(param, state).probs_parameter())(
-                 jnp.arange(self.num_states)
+                jnp.arange(self.num_states)
             )
         probs = vmap(g)(params_restricted)
         return probs
