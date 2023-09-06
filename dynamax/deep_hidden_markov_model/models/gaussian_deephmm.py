@@ -221,7 +221,8 @@ class SphericalGaussianDeepHMM(DeepHMM):
                    method: str="prior",
                    initial_probs: Optional[Float[Array, "num_states"]]=None,
                    transition_matrix: Optional[Float[Array, "num_states num_states"]]=None,
-                   pretrain_emissions: Optional[Dict]=None
+                   pretrain_emissions: Optional[Dict]=None,
+                   pretrain_transitions: Optional[Dict]=None
         ) -> Tuple[DeepHMMParameterSet, DeepHMMPropertySet]:
         """Initialize the model parameters and their corresponding properties.
 
@@ -235,6 +236,7 @@ class SphericalGaussianDeepHMM(DeepHMM):
             initial_probs: manually specified initial state probabilities.
             transition_matrix: manually specified transition matrix.
             pretrain_emissions: a dictionary containing ...
+            pretrain_transitions: a dictionary containing ...
         Returns:
             Model parameters and their properties.
 
@@ -242,6 +244,9 @@ class SphericalGaussianDeepHMM(DeepHMM):
         key1, key2, key3 = jr.split(key , 3)
         params, props = dict(), dict()
         params["initial"], props["initial"] = self.initial_component.initialize(key1, method=method, initial_probs=initial_probs)
-        params["transitions"], props["transitions"] = self.transition_component.initialize(key2, method=method, transition_matrix=transition_matrix)
-        params["emissions"], props["emissions"] = self.emission_component.initialize(key3, pretrain_emissions)
+        params["transitions"], props["transitions"] = self.transition_component.initialize(key2, method=method,
+                transition_matrix=transition_matrix,
+                pretrain_transitions=pretrain_transitions)
+        params["emissions"], props["emissions"] = self.emission_component.initialize(key3, 
+                pretrain_emissions=pretrain_emissions)
         return ParamsSphericalGaussianDeepHMM(**params), ParamsSphericalGaussianDeepHMM(**props)

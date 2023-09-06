@@ -7,7 +7,7 @@ import tensorflow_probability.substrates.jax.bijectors as tfb
 from dynamax.hidden_markov_model.models.transitions import ParamsStandardHMMTransitions
 from dynamax.deep_hidden_markov_model.models.abstractions import DeepHMMTransitions
 from dynamax.parameters import ParameterProperties, from_unconstrained
-from dynamax.utils.nn import _MLP, make_mlp
+from dynamax.utils.nn import _MLP, make_mlp, pretrain_nn
 from jaxtyping import Float, Array
 from typing import NamedTuple, Union
 
@@ -34,7 +34,8 @@ class DeepHMMTransitions(DeepHMMTransitions):
     def distribution(self, params, state, inputs=None):
         return tfd.Categorical(probs=params.transition_matrix[state])
 
-    def initialize(self, key=jr.PRNGKey(0), method="prior", transition_matrix=None):
+    def initialize(self, key=jr.PRNGKey(0), method="prior",
+            transition_matrix=None, pretrain_transitions=None):
         """Initialize the model parameters and their corresponding properties.
 
         Args:
@@ -62,6 +63,16 @@ class DeepHMMTransitions(DeepHMMTransitions):
                 params.nn_params),
             transition_matrix=ParameterProperties(constrainer=tfb.SoftmaxCentered())
         )
+
+        if pretrain_transitions is not None:
+            params = params._replace(
+                nn_params=pretrain_nn(
+                    self.nn,
+                    params.nn_params,
+                    props,
+                    pretrain_transitions
+                )
+            )
         return params, props
 
     def log_prior(self, params):

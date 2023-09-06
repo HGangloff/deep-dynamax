@@ -1,4 +1,3 @@
-import jax
 import jax.random as jr
 import jax.numpy as jnp
 from jax import vmap
@@ -72,10 +71,11 @@ def pretrain_nn(nn, nn_params, props, pretrain_params):
     """
     pretrain_params (dict) with keys inputs, outputs, optimizer,
     optimizer_state, num_mstep_iters
-    """
-    # the output (ie params) should be given in their unconstrained form!!!
-    # unc_params = to_unconstrained(params, props)
 
+    the output (ie HMM natural params to be fitted againts)
+    should be given in their unconstrained form
+    """
+    # TODO
     #batch_outputs = ensure_array_has_batch_dim(
     #    pretrain_params["outputs"],
     #    pretrain_params["outputs"]
