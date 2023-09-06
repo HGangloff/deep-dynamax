@@ -238,7 +238,7 @@ class HMMTransitions(ABC):
         """
         raise NotImplementedError
 
-    def _compute_transition_matrices(self, params, inputs=None):
+    def _compute_transition_matrices(self, params, props=None, emissions=None, inputs=None):
         if inputs is not None:
             f = lambda inpt: \
                 vmap(lambda state: \
@@ -548,31 +548,32 @@ class HMM(SSM):
         return lp
 
     # The inference functions all need the same arguments
-    def _inference_args(self, params, emissions, inputs):
+    def _inference_args(self, params, props, emissions, inputs):
         return (self.initial_component._compute_initial_probs(params.initial, inputs),
-                self.transition_component._compute_transition_matrices(params.transitions, inputs),
+                self.transition_component._compute_transition_matrices(params.transitions,
+                    props, inputs),
                 self.emission_component._compute_conditional_logliks(params.emissions, emissions, inputs))
 
     # Convenience wrappers for the inference code
-    def marginal_log_prob(self, params, emissions, inputs=None):
-        post = hmm_filter(*self._inference_args(params, emissions, inputs))
+    def marginal_log_prob(self, params, props, emissions, inputs=None):
+        post = hmm_filter(*self._inference_args(params, props, emissions, inputs))
         return post.marginal_loglik
 
-    def most_likely_states(self, params, emissions, inputs=None):
-        return hmm_posterior_mode(*self._inference_args(params, emissions, inputs))
+    def most_likely_states(self, params, props, emissions, inputs=None):
+        return hmm_posterior_mode(*self._inference_args(params, props, emissions, inputs))
 
-    def filter(self, params, emissions, inputs=None):
-        return hmm_filter(*self._inference_args(params, emissions, inputs))
+    def filter(self, params, emissions, props, inputs=None):
+        return hmm_filter(*self._inference_args(params, props, emissions, inputs))
 
     def smoother(self, params, emissions, inputs=None):
         return hmm_smoother(*self._inference_args(params, emissions, inputs))
 
     # Expectation-maximization (EM) code
-    def e_step(self, params, emissions, inputs=None):
+    def e_step(self, params, props, emissions, inputs=None):
         """The E-step computes expected sufficient statistics under the
         posterior. In the generic case, we simply return the posterior itself.
         """
-        args = self._inference_args(params, emissions, inputs)
+        args = self._inference_args(params, props, emissions, inputs)
         posterior = hmm_two_filter_smoother(*args)
 
         initial_stats = self.initial_component.collect_suff_stats(params.initial, posterior, inputs)
