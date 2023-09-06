@@ -385,7 +385,7 @@ class SSM(ABC):
 
         @jit
         def em_step(params, m_step_state):
-            batch_stats, lls = vmap(partial(self.e_step, params))(batch_emissions, batch_inputs)
+            batch_stats, lls = vmap(partial(self.e_step, params, props))(batch_emissions, batch_inputs)
             lp = self.log_prior(params) + lls.sum()
             params, m_step_state = self.m_step(params, props, batch_stats, m_step_state)
             return params, m_step_state, lp
